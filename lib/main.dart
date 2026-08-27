@@ -15,6 +15,55 @@ void main() => runApp(const TetraPongApp());
 
 enum P2Mode { ai, localKeyboard, remote }
 
+enum TetrominoType { i, j, l, o, s, t, z }
+
+const tetrominoCells = <TetrominoType, List<List<int>>>{
+  TetrominoType.i: [
+    [0, 1],
+    [1, 1],
+    [2, 1],
+    [3, 1],
+  ],
+  TetrominoType.j: [
+    [0, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ],
+  TetrominoType.l: [
+    [2, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ],
+  TetrominoType.o: [
+    [1, 0],
+    [2, 0],
+    [1, 1],
+    [2, 1],
+  ],
+  TetrominoType.s: [
+    [1, 0],
+    [2, 0],
+    [0, 1],
+    [1, 1],
+  ],
+  TetrominoType.t: [
+    [1, 0],
+    [0, 1],
+    [1, 1],
+    [2, 1],
+  ],
+  TetrominoType.z: [
+    [0, 0],
+    [1, 0],
+    [1, 1],
+    [2, 1],
+  ],
+};
+
+String tetrominoName(TetrominoType type) => type.name.toUpperCase();
+
 enum GamePhase {
   menu,
   howToPlay,
@@ -30,6 +79,9 @@ class MatchState {
   GamePhase phase = GamePhase.menu;
   P2Mode p2Mode = P2Mode.ai;
   bool remoteConnected = false;
+  TetrominoType activePiece = TetrominoType.t;
+  final List<TetrominoType> nextPieces = [];
+  int turn = 0;
   double ballX = .5, ballY = .5, vx = .42, vy = .18;
   double paddleLeft = .5, paddleRight = .5;
   int scoreLeft = 0, scoreRight = 0, missesLeft = 0, missesRight = 0;
@@ -48,6 +100,31 @@ class GameController extends ChangeNotifier {
   final RemoteSocketAdapter remote = BrowserRemoteSocket();
   double _aiTarget = .5;
   bool _up = false, _down = false, _p2Up = false, _p2Down = false;
+  final _random = math.Random();
+
+  void _resetPiecePool() {
+    state.nextPieces
+      ..clear()
+      ..addAll(TetrominoType.values);
+    state.nextPieces.shuffle(_random);
+    state.activePiece = state.nextPieces.removeAt(0);
+    state.nextPieces.addAll(TetrominoType.values);
+    state.nextPieces.shuffle(_random);
+    state.turn = 1;
+  }
+
+  void _advancePiece() {
+    if (state.nextPieces.isEmpty) {
+      state.nextPieces.addAll(TetrominoType.values);
+      state.nextPieces.shuffle(_random);
+    }
+    state.activePiece = state.nextPieces.removeAt(0);
+    if (state.nextPieces.length < 4) {
+      final refill = [...TetrominoType.values]..shuffle(_random);
+      state.nextPieces.addAll(refill);
+    }
+    state.turn++;
+  }
 
   void setP2Mode(P2Mode mode) {
     state.p2Mode = mode;
@@ -98,6 +175,7 @@ class GameController extends ChangeNotifier {
     state.scoreLeft = state.scoreRight = state.missesLeft = state.missesRight =
         0;
     state.linesLeft = state.linesRight = 0;
+    _resetPiecePool();
     for (final board in [state.boardLeft, state.boardRight]) {
       for (final row in board) row.fillRange(0, row.length, 0);
     }
@@ -174,7 +252,8 @@ class GameController extends ChangeNotifier {
     state.ballX = .5;
     state.ballY = .5;
     state.vx = rightPlayer ? -.42 : .42;
-    state.vy = (math.Random().nextDouble() - .5) * .42;
+    state.vy = (_random.nextDouble() - .5) * .42;
+    _advancePiece();
     if (rightPlayer) {
       state.missesRight++;
       _addPenalty(state.boardRight);
@@ -452,44 +531,55 @@ class GameplayView extends StatelessWidget {
               Positioned(
                 top: 12,
                 left: 18,
-                child: Text(
-                  'P1  ${game.state.scoreLeft}',
-                  style: const TextStyle(
-                    color: blue,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: StatusPanel(
+                  player: 'P1',
+                  score: game.state.scoreLeft,
+                  danger:
+                      game.state.boardLeft
+                          .expand((r) => r)
+                          .where((v) => v == 1)
+                          .length /
+                      96,
+                  color: blue,
                 ),
               ),
               Positioned(
                 top: 12,
                 right: 18,
-                child: Text(
-                  '${game.state.scoreRight}  P2',
-                  style: const TextStyle(
-                    color: pink,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                child: StatusPanel(
+                  player: 'P2',
+                  score: game.state.scoreRight,
+                  danger:
+                      game.state.boardRight
+                          .expand((r) => r)
+                          .where((v) => v == 1)
+                          .length /
+                      96,
+                  color: pink,
                 ),
               ),
               Positioned(
-                top: 8,
+                top: 12,
                 left: 0,
                 right: 0,
                 child: Center(
-                  child: Text(
-                    game.state.phase == GamePhase.ready
-                        ? 'READY'
-                        : game.state.phase == GamePhase.paused
-                        ? 'PAUSED'
-                        : game.state.phase == GamePhase.danger
-                        ? 'DANGER'
-                        : 'PLAYING',
-                    style: TextStyle(
-                      color: game.state.phase == GamePhase.danger ? pink : gold,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 3,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 42,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: gold, width: 3),
+                      color: ink,
+                    ),
+                    child: Text(
+                      '${game.state.scoreLeft.toString().padLeft(2, '0')}  :  ${game.state.scoreRight.toString().padLeft(2, '0')}  •  ${game.state.phase.name.toUpperCase()}',
+                      style: const TextStyle(
+                        color: gold,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 3,
+                      ),
                     ),
                   ),
                 ),
@@ -566,6 +656,71 @@ class GameplayView extends StatelessWidget {
   }
 }
 
+class StatusPanel extends StatelessWidget {
+  final String player;
+  final int score;
+  final double danger;
+  final Color color;
+  const StatusPanel({
+    super.key,
+    required this.player,
+    required this.score,
+    required this.danger,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 270,
+    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+    decoration: BoxDecoration(
+      color: ink,
+      border: Border.all(color: color, width: 3),
+    ),
+    child: Row(
+      children: [
+        Container(
+          width: 54,
+          height: 42,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(border: Border.all(color: gold, width: 2)),
+          child: Text(
+            player,
+            style: TextStyle(
+              color: color,
+              fontSize: 20,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'DANGER  ${score.toString().padLeft(2, '0')}',
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 5),
+              LinearProgressIndicator(
+                value: danger.clamp(0, 1),
+                minHeight: 8,
+                backgroundColor: Colors.white12,
+                color: color,
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class VirtualControl extends StatelessWidget {
   final String label, semanticLabel;
   final VoidCallback onTap;
@@ -639,28 +794,46 @@ class ArenaPainter extends CustomPainter {
       ),
       paddle,
     );
-    paddle.color = gold;
     final bx = s.ballX * size.width, by = s.ballY * size.height;
-    c.drawRect(
-      Rect.fromCenter(center: Offset(bx, by), width: 28, height: 28),
-      paddle,
-    );
-    final tet = Path()
-      ..moveTo(bx, by - 23)
-      ..lineTo(bx - 23, by)
-      ..lineTo(bx - 8, by)
-      ..lineTo(bx - 8, by + 18)
-      ..lineTo(bx + 8, by + 18)
-      ..lineTo(bx + 8, by)
-      ..lineTo(bx + 23, by)
-      ..close();
-    c.drawPath(
-      tet,
-      Paint()
-        ..color = gold
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
-    );
+    _piece(c, s.activePiece, Offset(bx, by), 18, gold);
+    for (var i = 0; i < math.min(4, s.nextPieces.length); i++) {
+      _piece(
+        c,
+        s.nextPieces[i],
+        Offset(size.width * .045, size.height * (.18 + i * .11)),
+        7,
+        gold,
+      );
+      _piece(
+        c,
+        s.nextPieces[i],
+        Offset(size.width * .955, size.height * (.18 + i * .11)),
+        7,
+        gold,
+      );
+    }
+  }
+
+  void _piece(
+    Canvas c,
+    TetrominoType type,
+    Offset center,
+    double cell,
+    Color color,
+  ) {
+    final paint = Paint()..color = color;
+    for (final point in tetrominoCells[type]!) {
+      final x = center.dx + (point[0] - 1.5) * cell;
+      final y = center.dy + (point[1] - .75) * cell;
+      c.drawRect(Rect.fromLTWH(x, y, cell - 2, cell - 2), paint);
+      c.drawRect(
+        Rect.fromLTWH(x, y, cell - 2, cell - 2),
+        Paint()
+          ..color = ink
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5,
+      );
+    }
   }
 
   void _board(Canvas c, List<List<int>> b, double x, double y, Color color) {
