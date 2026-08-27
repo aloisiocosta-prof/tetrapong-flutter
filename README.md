@@ -35,13 +35,17 @@ flutter build web --wasm --release
 
 O build WebAssembly é uma capacidade nova do Flutter e deve ser validado em navegadores-alvo antes de produção. O pipeline executa análise, testes, cobertura, build Web e build Wasm em pull requests e pushes para `main`/`develop`.
 
+## GitHub Pages
+
+O workflow `.github/workflows/ci.yml` publica automaticamente o conteúdo de `build/web` no GitHub Pages após cada push aprovado em `main`, usando o ambiente `github-pages`. A URL esperada é `https://aloisiocosta-prof.github.io/tetrapong-flutter/`. Para a primeira publicação, a fonte **Settings → Pages → Build and deployment → Source → GitHub Actions** precisa estar habilitada no repositório; o token de automação disponível não possui permissão administrativa para ativar essa configuração via API.
+
 ## Estrutura atual
 
 | Caminho | Responsabilidade |
 |---|---|
 | `lib/main.dart` | Protótipo integrado com domínio, estado, simulação, HUD e telas. |
 | `assets/` | Assets visuais, spritesheets, ícones e trilha gerados para o TetraPong. |
-| `.github/workflows/ci.yml` | Qualidade, testes, cobertura e builds. |
+| `.github/workflows/ci.yml` | Qualidade, testes, cobertura, builds e deploy GitHub Pages. |
 | `.github/workflows/security.yml` | Gitleaks, auditoria de dependências e Trivy. |
 | `test/widget_test.dart` | Testes de menu e navegação básica. |
 
