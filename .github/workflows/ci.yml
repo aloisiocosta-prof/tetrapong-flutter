@@ -29,9 +29,9 @@ jobs:
       - name: Tests
         run: flutter test --coverage
       - name: Web build
-        run: flutter build web --release
+        run: flutter build web --release --base-href /tetrapong-flutter/
       - name: WebAssembly build
-        run: flutter build web --wasm --release
+        run: flutter build web --wasm --release --base-href /tetrapong-flutter/
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
@@ -42,3 +42,27 @@ jobs:
         with:
           name: tetrapong-web
           path: build/web
+      - name: Configure GitHub Pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: build/web
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
