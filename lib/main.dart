@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+import 'remote_socket.dart';
 
 const gold = Color(0xFFFFD700);
 const blue = Color(0xFF0055FF);
@@ -9,6 +12,8 @@ const pink = Color(0xFFFF3366);
 const ink = Color(0xFF050505);
 
 void main() => runApp(const TetraPongApp());
+
+enum P2Mode { ai, localKeyboard, remote }
 
 enum GamePhase {
   menu,
@@ -23,6 +28,8 @@ enum GamePhase {
 
 class MatchState {
   GamePhase phase = GamePhase.menu;
+  P2Mode p2Mode = P2Mode.ai;
+  bool remoteConnected = false;
   double ballX = .5, ballY = .5, vx = .42, vy = .18;
   double paddleLeft = .5, paddleRight = .5;
   int scoreLeft = 0, scoreRight = 0, missesLeft = 0, missesRight = 0;
@@ -37,8 +44,55 @@ class GameController extends ChangeNotifier {
   Timer? _timer;
   DateTime? _last;
   bool reducedMotion = false, highContrast = true;
+  String remoteUrl = 'ws://localhost:8080';
+  final RemoteSocketAdapter remote = BrowserRemoteSocket();
+  double _aiTarget = .5;
+  bool _up = false, _down = false, _p2Up = false, _p2Down = false;
+
+  void setP2Mode(P2Mode mode) {
+    state.p2Mode = mode;
+    notifyListeners();
+  }
+
+  void connectRemote(String url) {
+    remote.connect(
+      url,
+      (y) {
+        state.paddleRight = y;
+        notifyListeners();
+      },
+      (ok) {
+        state.remoteConnected = ok;
+        notifyListeners();
+      },
+    );
+  }
+
+  void keyDown(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW)
+      _up = true;
+    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS)
+      _down = true;
+    if (key == LogicalKeyboardKey.keyI) _p2Up = true;
+    if (key == LogicalKeyboardKey.keyK) _p2Down = true;
+  }
+
+  void keyUp(LogicalKeyboardKey key) {
+    if (key == LogicalKeyboardKey.arrowUp || key == LogicalKeyboardKey.keyW)
+      _up = false;
+    if (key == LogicalKeyboardKey.arrowDown || key == LogicalKeyboardKey.keyS)
+      _down = false;
+    if (key == LogicalKeyboardKey.keyI) _p2Up = false;
+    if (key == LogicalKeyboardKey.keyK) _p2Down = false;
+  }
+
+  void setPaddleByPointer(double y, double height) =>
+      setPaddle(true, y / height);
+  void virtualMove(double direction) =>
+      setPaddle(true, state.paddleLeft + direction * .055);
 
   void start() {
+    if (state.p2Mode == P2Mode.remote) connectRemote(remoteUrl);
     state.phase = GamePhase.ready;
     state.winner = null;
     state.scoreLeft = state.scoreRight = state.missesLeft = state.missesRight =
@@ -72,6 +126,19 @@ class GameController extends ChangeNotifier {
       .05,
     );
     _last = now;
+    if (_up) state.paddleLeft -= .55 * dt;
+    if (_down) state.paddleLeft += .55 * dt;
+    if (state.p2Mode == P2Mode.ai) {
+      _aiTarget = (state.ballX > .45 ? state.ballY : .5);
+      state.paddleRight += (state.paddleRight < _aiTarget ? 1 : -1) * .34 * dt;
+      state.paddleRight = state.paddleRight.clamp(.15, .85);
+    } else if (state.p2Mode == P2Mode.localKeyboard) {
+      if (_p2Up) state.paddleRight -= .55 * dt;
+      if (_p2Down) state.paddleRight += .55 * dt;
+      state.paddleRight = state.paddleRight.clamp(.15, .85);
+    } else if (state.p2Mode == P2Mode.remote) {
+      remote.sendPaddle(state.paddleLeft);
+    }
     state.ballX += state.vx * dt;
     state.ballY += state.vy * dt;
     if (state.ballY < .06 || state.ballY > .94) {
@@ -167,6 +234,7 @@ class GameController extends ChangeNotifier {
 
   void disposeGame() {
     _timer?.cancel();
+    remote.dispose();
     super.dispose();
   }
 }
@@ -274,7 +342,36 @@ class MenuView extends StatelessWidget {
           'EVERY MISS BUILDS A PROBLEM',
           style: TextStyle(color: Colors.white70, letterSpacing: 2),
         ),
-        const SizedBox(height: 40),
+        const SizedBox(height: 24),
+        const Text(
+          'PLAYER 2 MODE',
+          style: TextStyle(color: Colors.white70, letterSpacing: 2),
+        ),
+        DropdownButton<P2Mode>(
+          value: game.state.p2Mode,
+          dropdownColor: ink,
+          underline: Container(height: 2, color: gold),
+          onChanged: (mode) {
+            if (mode != null) game.setP2Mode(mode);
+          },
+          items: const [
+            DropdownMenuItem(value: P2Mode.ai, child: Text('AI OPPONENT')),
+            DropdownMenuItem(
+              value: P2Mode.localKeyboard,
+              child: Text('LOCAL KEYBOARD'),
+            ),
+            DropdownMenuItem(
+              value: P2Mode.remote,
+              child: Text('REMOTE WEBSOCKET'),
+            ),
+          ],
+        ),
+        if (game.state.p2Mode == P2Mode.remote)
+          const Text(
+            'ws://localhost:8080  •  configure before online match',
+            style: TextStyle(color: pink, fontSize: 11),
+          ),
+        const SizedBox(height: 18),
         ActionButton(label: 'PLAY', onTap: game.start, primary: true),
         ActionButton(
           label: 'HOW TO PLAY',
@@ -330,82 +427,175 @@ class GameplayView extends StatelessWidget {
   final GameController game;
   final Size size;
   const GameplayView({super.key, required this.game, required this.size});
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onVerticalDragUpdate: (d) => game.setPaddle(
-        true,
-        game.state.paddleLeft +
-            d.delta.dy / (size.height == 0 ? 1 : size.height),
-      ),
-      child: Stack(
-        children: [
-          CustomPaint(size: size, painter: ArenaPainter(game.state)),
-          Positioned(
-            top: 12,
-            left: 18,
-            child: Text(
-              'P1  ${game.state.scoreLeft}',
-              style: const TextStyle(
-                color: blue,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent) game.keyDown(event.logicalKey);
+        if (event is KeyUpEvent) game.keyUp(event.logicalKey);
+        return KeyEventResult.handled;
+      },
+      child: MouseRegion(
+        onHover: (event) =>
+            game.setPaddleByPointer(event.localPosition.dy, size.height),
+        child: GestureDetector(
+          onVerticalDragUpdate: (d) => game.setPaddle(
+            true,
+            game.state.paddleLeft +
+                d.delta.dy / (size.height == 0 ? 1 : size.height),
           ),
-          Positioned(
-            top: 12,
-            right: 18,
-            child: Text(
-              '${game.state.scoreRight}  P2',
-              style: const TextStyle(
-                color: pink,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          Positioned(
-            top: 8,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Text(
-                game.state.phase == GamePhase.ready
-                    ? 'READY'
-                    : game.state.phase == GamePhase.paused
-                    ? 'PAUSED'
-                    : game.state.phase == GamePhase.danger
-                    ? 'DANGER'
-                    : 'PLAYING',
-                style: TextStyle(
-                  color: game.state.phase == GamePhase.danger ? pink : gold,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 3,
+          child: Stack(
+            children: [
+              CustomPaint(size: size, painter: ArenaPainter(game.state)),
+              Positioned(
+                top: 12,
+                left: 18,
+                child: Text(
+                  'P1  ${game.state.scoreLeft}',
+                  style: const TextStyle(
+                    color: blue,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-            ),
-          ),
-          Positioned(
-            top: 8,
-            right: 90,
-            child: IconButton(
-              onPressed: game.pause,
-              icon: const Icon(Icons.pause, color: Colors.white),
-            ),
-          ),
-          if (game.state.phase == GamePhase.paused)
-            Center(
-              child: ActionButton(
-                label: 'RESUME',
-                onTap: game.resume,
-                primary: true,
+              Positioned(
+                top: 12,
+                right: 18,
+                child: Text(
+                  '${game.state.scoreRight}  P2',
+                  style: const TextStyle(
+                    color: pink,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
-            ),
-        ],
+              Positioned(
+                top: 8,
+                left: 0,
+                right: 0,
+                child: Center(
+                  child: Text(
+                    game.state.phase == GamePhase.ready
+                        ? 'READY'
+                        : game.state.phase == GamePhase.paused
+                        ? 'PAUSED'
+                        : game.state.phase == GamePhase.danger
+                        ? 'DANGER'
+                        : 'PLAYING',
+                    style: TextStyle(
+                      color: game.state.phase == GamePhase.danger ? pink : gold,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 8,
+                right: 90,
+                child: IconButton(
+                  tooltip: 'Pause game',
+                  onPressed: game.pause,
+                  icon: const Icon(Icons.pause, color: Colors.white),
+                ),
+              ),
+              if (game.state.phase == GamePhase.paused)
+                Center(
+                  child: ActionButton(
+                    label: 'RESUME',
+                    onTap: game.resume,
+                    primary: true,
+                  ),
+                ),
+              Positioned(
+                left: 20,
+                bottom: 18,
+                child: VirtualControl(
+                  label: '▲',
+                  semanticLabel: 'Move paddle up',
+                  onTap: () => game.virtualMove(-1),
+                ),
+              ),
+              Positioned(
+                left: 20,
+                bottom: 78,
+                child: VirtualControl(
+                  label: '▼',
+                  semanticLabel: 'Move paddle down',
+                  onTap: () => game.virtualMove(1),
+                ),
+              ),
+              Positioned(
+                left: 92,
+                bottom: 18,
+                child: const Text(
+                  'P1: W/S or ↑/↓ • mouse • touch',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
+              ),
+              if (game.state.p2Mode == P2Mode.localKeyboard)
+                const Positioned(
+                  right: 20,
+                  bottom: 18,
+                  child: Text(
+                    'P2: I/K',
+                    style: TextStyle(color: pink, fontSize: 12),
+                  ),
+                ),
+              if (game.state.p2Mode == P2Mode.remote)
+                Positioned(
+                  right: 20,
+                  bottom: 18,
+                  child: Text(
+                    game.state.remoteConnected ? 'P2: ONLINE' : 'P2: OFFLINE',
+                    style: TextStyle(
+                      color: game.state.remoteConnected ? gold : pink,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
+}
+
+class VirtualControl extends StatelessWidget {
+  final String label, semanticLabel;
+  final VoidCallback onTap;
+  const VirtualControl({
+    super.key,
+    required this.label,
+    required this.semanticLabel,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: semanticLabel,
+    child: SizedBox(
+      width: 54,
+      height: 48,
+      child: OutlinedButton(
+        onPressed: onTap,
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: gold, width: 2),
+          foregroundColor: gold,
+          padding: EdgeInsets.zero,
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+        ),
+      ),
+    ),
+  );
 }
 
 class ArenaPainter extends CustomPainter {
@@ -561,6 +751,20 @@ class SettingsView extends StatelessWidget {
               game.notifyListeners();
             },
           ),
+          if (game.state.p2Mode == P2Mode.remote)
+            SizedBox(
+              width: 360,
+              child: TextField(
+                decoration: const InputDecoration(
+                  labelText: 'REMOTE WEBSOCKET URL',
+                  hintText: 'wss://server.example/game',
+                ),
+                keyboardType: TextInputType.url,
+                onChanged: (value) {
+                  if (value.trim().isNotEmpty) game.remoteUrl = value.trim();
+                },
+              ),
+            ),
           const SizedBox(height: 25),
           ActionButton(
             label: 'BACK',
