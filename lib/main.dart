@@ -356,7 +356,11 @@ class GameShell extends StatelessWidget {
         builder: (context, c) => Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 1280),
-            child: _screen(context, c),
+            child: SizedBox(
+              width: math.min(c.maxWidth, 1280),
+              height: math.min(c.maxHeight, 720),
+              child: _screen(context, c),
+            ),
           ),
         ),
       ),
@@ -451,9 +455,15 @@ class MenuView extends StatelessWidget {
             style: TextStyle(color: pink, fontSize: 11),
           ),
         const SizedBox(height: 18),
-        ActionButton(label: 'PLAY', onTap: game.start, primary: true),
+        ActionButton(
+          label: 'PLAY',
+          icon: Icons.play_arrow,
+          onTap: game.start,
+          primary: true,
+        ),
         ActionButton(
           label: 'HOW TO PLAY',
+          icon: Icons.menu_book_outlined,
           onTap: () {
             game.state.phase = GamePhase.howToPlay;
             game.notifyListeners();
@@ -461,9 +471,33 @@ class MenuView extends StatelessWidget {
         ),
         ActionButton(
           label: 'SETTINGS',
+          icon: Icons.settings_outlined,
           onTap: () {
             game.state.phase = GamePhase.settings;
             game.notifyListeners();
+          },
+        ),
+        ActionButton(
+          label: 'CREDITS',
+          icon: Icons.star_outline,
+          onTap: () {
+            showDialog<void>(
+              context: context,
+              builder: (_) => AlertDialog(
+                backgroundColor: ink,
+                title: const Text('CREDITS', style: TextStyle(color: gold)),
+                content: const Text(
+                  'TetraPong — Flutter Web/Wasm prototype',
+                  style: TextStyle(color: Colors.white),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('CLOSE'),
+                  ),
+                ],
+              ),
+            );
           },
         ),
       ],
@@ -473,12 +507,14 @@ class MenuView extends StatelessWidget {
 
 class ActionButton extends StatelessWidget {
   final String label;
+  final IconData? icon;
   final VoidCallback onTap;
   final bool primary;
   const ActionButton({
     super.key,
     required this.label,
     required this.onTap,
+    this.icon,
     this.primary = false,
   });
   @override
@@ -493,9 +529,21 @@ class ActionButton extends StatelessWidget {
           side: BorderSide(color: primary ? gold : Colors.white70, width: 2),
           foregroundColor: primary ? gold : Colors.white,
         ),
-        child: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 2),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            if (icon != null) ...[
+              Icon(icon, size: 21),
+              const SizedBox(width: 10),
+            ],
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                letterSpacing: 2,
+              ),
+            ),
+          ],
         ),
       ),
     ),
