@@ -395,6 +395,8 @@ class Frame extends StatelessWidget {
   const Frame({super.key, required this.child});
   @override
   Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    height: double.infinity,
     decoration: BoxDecoration(
       border: Border.all(color: gold, width: 4),
       color: ink,
