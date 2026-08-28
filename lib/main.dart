@@ -405,104 +405,195 @@ class Frame extends StatelessWidget {
   );
 }
 
+class MenuBackdropPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final grid = Paint()
+      ..color = gold.withOpacity(.22)
+      ..strokeWidth = 1;
+    for (double x = 24; x < size.width; x += 42)
+      canvas.drawLine(Offset(x, 18), Offset(x, size.height - 18), grid);
+    for (double y = 22; y < size.height; y += 42)
+      canvas.drawLine(Offset(18, y), Offset(size.width - 18, y), grid);
+    final frame = Paint()
+      ..color = gold
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8;
+    final path = Path()
+      ..moveTo(28, 42)
+      ..lineTo(70, 10)
+      ..lineTo(size.width - 70, 10)
+      ..lineTo(size.width - 28, 42)
+      ..lineTo(size.width - 28, size.height - 42)
+      ..lineTo(size.width - 70, size.height - 10)
+      ..lineTo(70, size.height - 10)
+      ..lineTo(28, size.height - 42)
+      ..close();
+    canvas.drawPath(path, frame);
+    final accent = Paint()
+      ..color = gold
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(
+      Rect.fromLTWH(42, size.height * .36, 18, size.height * .28),
+      accent,
+    );
+    canvas.drawRect(
+      Rect.fromLTWH(size.width - 60, size.height * .36, 18, size.height * .28),
+      accent,
+    );
+    for (var i = 0; i < 3; i++) {
+      canvas.drawRect(
+        Rect.fromLTWH(size.width * .24 + i * 16, 32, 10, 10),
+        accent,
+      );
+      canvas.drawRect(
+        Rect.fromLTWH(size.width * .74 + i * 16, 32, 10, 10),
+        accent,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant MenuBackdropPainter oldDelegate) => false;
+}
+
 class MenuView extends StatelessWidget {
   final GameController game;
   const MenuView({super.key, required this.game});
   @override
   Widget build(BuildContext context) => Frame(
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text(
-          'TETRAPONG',
-          style: TextStyle(
-            color: gold,
-            fontSize: 58,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 5,
-          ),
-        ),
-        const SizedBox(height: 10),
-        const Text(
-          'EVERY MISS BUILDS A PROBLEM',
-          style: TextStyle(color: Colors.white70, letterSpacing: 2),
-        ),
-        const SizedBox(height: 24),
-        const Text(
-          'PLAYER 2 MODE',
-          style: TextStyle(color: Colors.white70, letterSpacing: 2),
-        ),
-        DropdownButton<P2Mode>(
-          value: game.state.p2Mode,
-          dropdownColor: ink,
-          underline: Container(height: 2, color: gold),
-          onChanged: (mode) {
-            if (mode != null) game.setP2Mode(mode);
-          },
-          items: const [
-            DropdownMenuItem(value: P2Mode.ai, child: Text('AI OPPONENT')),
-            DropdownMenuItem(
-              value: P2Mode.localKeyboard,
-              child: Text('LOCAL KEYBOARD'),
-            ),
-            DropdownMenuItem(
-              value: P2Mode.remote,
-              child: Text('REMOTE WEBSOCKET'),
-            ),
-          ],
-        ),
-        if (game.state.p2Mode == P2Mode.remote)
-          const Text(
-            'ws://localhost:8080  •  configure before online match',
-            style: TextStyle(color: pink, fontSize: 11),
-          ),
-        const SizedBox(height: 18),
-        ActionButton(
-          label: 'PLAY',
-          icon: Icons.play_arrow,
-          onTap: game.start,
-          primary: true,
-        ),
-        ActionButton(
-          label: 'HOW TO PLAY',
-          icon: Icons.menu_book_outlined,
-          onTap: () {
-            game.state.phase = GamePhase.howToPlay;
-            game.notifyListeners();
-          },
-        ),
-        ActionButton(
-          label: 'SETTINGS',
-          icon: Icons.settings_outlined,
-          onTap: () {
-            game.state.phase = GamePhase.settings;
-            game.notifyListeners();
-          },
-        ),
-        ActionButton(
-          label: 'CREDITS',
-          icon: Icons.star_outline,
-          onTap: () {
-            showDialog<void>(
-              context: context,
-              builder: (_) => AlertDialog(
-                backgroundColor: ink,
-                title: const Text('CREDITS', style: TextStyle(color: gold)),
-                content: const Text(
-                  'TetraPong — Flutter Web/Wasm prototype',
-                  style: TextStyle(color: Colors.white),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('CLOSE'),
+    child: LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        fit: StackFit.expand,
+        children: [
+          CustomPaint(painter: MenuBackdropPainter()),
+          Align(
+            alignment: Alignment.center,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 44,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ink,
+                      border: Border.all(color: gold, width: 4),
+                    ),
+                    child: const Text(
+                      'TETRAPONG',
+                      style: TextStyle(
+                        color: gold,
+                        fontSize: 58,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 6,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'EVERY MISS BUILDS A PROBLEM',
+                    style: TextStyle(color: Colors.white70, letterSpacing: 2),
+                  ),
+                  const SizedBox(height: 18),
+                  const Text(
+                    'PLAYER 2 MODE',
+                    style: TextStyle(color: Colors.white70, letterSpacing: 2),
+                  ),
+                  DropdownButton<P2Mode>(
+                    value: game.state.p2Mode,
+                    dropdownColor: ink,
+                    underline: Container(height: 2, color: gold),
+                    onChanged: (mode) {
+                      if (mode != null) game.setP2Mode(mode);
+                    },
+                    items: const [
+                      DropdownMenuItem(
+                        value: P2Mode.ai,
+                        child: Text('AI OPPONENT'),
+                      ),
+                      DropdownMenuItem(
+                        value: P2Mode.localKeyboard,
+                        child: Text('LOCAL KEYBOARD'),
+                      ),
+                      DropdownMenuItem(
+                        value: P2Mode.remote,
+                        child: Text('REMOTE WEBSOCKET'),
+                      ),
+                    ],
+                  ),
+                  if (game.state.p2Mode == P2Mode.remote)
+                    const Text(
+                      'ws://localhost:8080  •  configure before online match',
+                      style: TextStyle(color: pink, fontSize: 11),
+                    ),
+                  const SizedBox(height: 16),
+                  ActionButton(
+                    label: 'PLAY',
+                    icon: Icons.play_arrow,
+                    onTap: game.start,
+                    primary: true,
+                    width: 430,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    children: [
+                      ActionButton(
+                        label: 'HOW TO PLAY',
+                        icon: Icons.menu_book_outlined,
+                        width: 210,
+                        onTap: () {
+                          game.state.phase = GamePhase.howToPlay;
+                          game.notifyListeners();
+                        },
+                      ),
+                      ActionButton(
+                        label: 'SETTINGS',
+                        icon: Icons.settings_outlined,
+                        width: 210,
+                        onTap: () {
+                          game.state.phase = GamePhase.settings;
+                          game.notifyListeners();
+                        },
+                      ),
+                      ActionButton(
+                        label: 'CREDITS',
+                        icon: Icons.star_outline,
+                        width: 210,
+                        onTap: () {
+                          showDialog<void>(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              backgroundColor: ink,
+                              title: const Text(
+                                'CREDITS',
+                                style: TextStyle(color: gold),
+                              ),
+                              content: const Text(
+                                'TetraPong — Flutter Web/Wasm prototype',
+                                style: TextStyle(color: Colors.white),
+                              ),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('CLOSE'),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
                 ],
               ),
-            );
-          },
-        ),
-      ],
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }
@@ -512,18 +603,20 @@ class ActionButton extends StatelessWidget {
   final IconData? icon;
   final VoidCallback onTap;
   final bool primary;
+  final double width;
   const ActionButton({
     super.key,
     required this.label,
     required this.onTap,
     this.icon,
     this.primary = false,
+    this.width = 330,
   });
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 24),
     child: SizedBox(
-      width: 330,
+      width: width,
       height: 54,
       child: OutlinedButton(
         onPressed: onTap,
