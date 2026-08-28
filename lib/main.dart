@@ -544,7 +544,7 @@ class MenuView extends StatelessWidget {
                       ActionButton(
                         label: 'HOW TO PLAY',
                         icon: Icons.menu_book_outlined,
-                        width: 210,
+                        width: 180,
                         onTap: () {
                           game.state.phase = GamePhase.howToPlay;
                           game.notifyListeners();
@@ -553,7 +553,7 @@ class MenuView extends StatelessWidget {
                       ActionButton(
                         label: 'SETTINGS',
                         icon: Icons.settings_outlined,
-                        width: 210,
+                        width: 180,
                         onTap: () {
                           game.state.phase = GamePhase.settings;
                           game.notifyListeners();
@@ -562,7 +562,7 @@ class MenuView extends StatelessWidget {
                       ActionButton(
                         label: 'CREDITS',
                         icon: Icons.star_outline,
-                        width: 210,
+                        width: 180,
                         onTap: () {
                           showDialog<void>(
                             context: context,
@@ -628,14 +628,19 @@ class ActionButton extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 21),
-              const SizedBox(width: 10),
+              Icon(icon, size: 18),
+              const SizedBox(width: 6),
             ],
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w800,
-                letterSpacing: 2,
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                ),
               ),
             ),
           ],
